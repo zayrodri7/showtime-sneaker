@@ -1,94 +1,152 @@
 <?php
 session_start();
+require_once "db.php";
 
-$products = [
-    1 => ["name" => "Nike Air Force 1", "price" => 115.00, "available" => true],
-    2 => ["name" => "Air Jordan 1 Retro", "price" => 180.00, "available" => true],
-    3 => ["name" => "Adidas Samba OG", "price" => 100.00, "available" => true],
-    4 => ["name" => "New Balance 550", "price" => 110.00, "available" => false],
-    5 => ["name" => "Yeezy Boost 350", "price" => 230.00, "available" => true],
-];
+if (!isset($_SESSION['cart'])) {
+    $_SESSION['cart'] = [];
+}
 
-// Remove one product from cart
-if (isset($_GET["remove"])) {
-    $remove_id = (int) $_GET["remove"];
-    unset($_SESSION["cart"][$remove_id]);
+if (isset($_POST['add_to_cart'])) {
+    $shoe_id = intval($_POST['shoe_id']);
+    $size = intval($_POST['size']);
+    $quantity = intval($_POST['quantity']);
+
+    if ($quantity < 1) {
+        die("Quantity must be at least 1.");
+    }
+
+    $stockStmt = $pdo->prepare("SELECT stock FROM shoe_sizes WHERE shoe_id = ? AND size = ?");
+    $stockStmt->execute([$shoe_id, $size]);
+    $stock = $stockStmt->fetchColumn();
+
+    if ($stock === false || $stock <= 0) {
+        die("This size is out of stock.");
+    }
+
+    if ($quantity > $stock) {
+        die("You cannot add more than the available stock.");
+    }
+
+    $cartKey = $shoe_id . "_" . $size;
+
+    if (!isset($_SESSION['cart'][$cartKey])) {
+        $_SESSION['cart'][$cartKey] = [
+            "shoe_id" => $shoe_id,
+            "size" => $size,
+            "quantity" => $quantity
+        ];
+    } else {
+        $newQuantity = $_SESSION['cart'][$cartKey]['quantity'] + $quantity;
+
+        if ($newQuantity > $stock) {
+            die("You cannot add more than the available stock.");
+        }
+
+        $_SESSION['cart'][$cartKey]['quantity'] = $newQuantity;
+    }
+
     header("Location: cart.php");
     exit;
 }
 
-// Clear entire cart
-if (isset($_GET["clear"])) {
-    unset($_SESSION["cart"]);
+if (isset($_GET['remove'])) {
+    unset($_SESSION['cart'][$_GET['remove']]);
     header("Location: cart.php");
     exit;
 }
-
-$cart = $_SESSION["cart"] ?? [];
-$total = 0;
 ?>
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Your Cart - Showtime Sneakers</title>
+    <title>Your Cart</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-        .container { max-width: 900px; margin: auto; background: white; padding: 25px; border-radius: 10px; }
-        .top-links { margin: 20px 0; }
-        .top-links a { margin-right: 15px; color: #111; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-        th { background: #111; color: white; }
-        .btn { display: inline-block; padding: 10px 14px; background: #111; color: white; text-decoration: none; border-radius: 6px; margin-top: 15px; }
-        .danger { background: #b00020; }
+        body {
+            font-family: Arial, sans-serif;
+            padding: 30px;
+            background: #f4f4f4;
+        }
+
+        table {
+            width: 100%;
+            background: white;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 14px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+        }
+
+        .btn {
+            display: inline-block;
+            background: black;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin-top: 20px;
+        }
+
+        .remove {
+            color: red;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Your Shopping Cart</h1>
 
-        <div class="top-links">
-            <a href="index.php">Continue Shopping</a>
-            <a href="cart.php">View Cart</a>
-        </div>
+<h1>Your Cart</h1>
 
-        <?php if (empty($cart)): ?>
-            <p>Your cart is currently empty.</p>
-        <?php else: ?>
-            <table>
-                <tr>
-                    <th>Product</th>
-                    <th>Price</th>
-                    <th>Quantity</th>
-                    <th>Subtotal</th>
-                    <th>Action</th>
-                </tr>
+<a class="btn" href="index.php">Continue Shopping</a>
 
-                <?php foreach ($cart as $id => $quantity): ?>
-                    <?php
-                    if (!isset($products[$id])) continue;
-                    $subtotal = $products[$id]["price"] * $quantity;
-                    $total += $subtotal;
-                    ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($products[$id]["name"]); ?></td>
-                        <td>$<?php echo number_format($products[$id]["price"], 2); ?></td>
-                        <td><?php echo $quantity; ?></td>
-                        <td>$<?php echo number_format($subtotal, 2); ?></td>
-                        <td><a href="cart.php?remove=<?php echo $id; ?>">Remove</a></td>
-                    </tr>
-                <?php endforeach; ?>
+<?php if (empty($_SESSION['cart'])): ?>
+    <p>Your cart is empty.</p>
+<?php else: ?>
 
-                <tr>
-                    <th colspan="3">Total</th>
-                    <th colspan="2">$<?php echo number_format($total, 2); ?></th>
-                </tr>
-            </table>
+<table>
+    <tr>
+        <th>Shoe</th>
+        <th>Size</th>
+        <th>Quantity</th>
+        <th>Price</th>
+        <th>Subtotal</th>
+        <th>Remove</th>
+    </tr>
 
-            <a class="btn" href="checkout.php">Proceed to Checkout</a>
-            <a class="btn danger" href="cart.php?clear=1">Clear Cart</a>
-        <?php endif; ?>
-    </div>
+    <?php
+    $total = 0;
+
+    foreach ($_SESSION['cart'] as $key => $item):
+        $stmt = $pdo->prepare("SELECT * FROM shoes WHERE id = ?");
+        $stmt->execute([$item['shoe_id']]);
+        $shoe = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        $subtotal = $shoe['price'] * $item['quantity'];
+        $total += $subtotal;
+    ?>
+        <tr>
+            <td><?= htmlspecialchars($shoe['name']) ?></td>
+            <td><?= htmlspecialchars($item['size']) ?></td>
+            <td><?= htmlspecialchars($item['quantity']) ?></td>
+            <td>$<?= number_format($shoe['price'], 2) ?></td>
+            <td>$<?= number_format($subtotal, 2) ?></td>
+            <td><a class="remove" href="cart.php?remove=<?= urlencode($key) ?>">Remove</a></td>
+        </tr>
+    <?php endforeach; ?>
+
+    <tr>
+        <td colspan="4"><strong>Total</strong></td>
+        <td><strong>$<?= number_format($total, 2) ?></strong></td>
+        <td></td>
+    </tr>
+</table>
+
+<a class="btn" href="checkout.php">Checkout</a>
+
+<?php endif; ?>
+
 </body>
 </html>
