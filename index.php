@@ -1,84 +1,128 @@
 <?php
 session_start();
+require_once "db.php";
 
-// Product list: id => product details
-$products = [
-    1 => ["name" => "Nike Air Force 1", "price" => 115.00, "available" => true],
-    2 => ["name" => "Air Jordan 1 Retro", "price" => 180.00, "available" => true],
-    3 => ["name" => "Adidas Samba OG", "price" => 100.00, "available" => true],
-    4 => ["name" => "New Balance 550", "price" => 110.00, "available" => false],
-    5 => ["name" => "Yeezy Boost 350", "price" => 230.00, "available" => true],
-];
-
-// Add product to cart
-if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["product_id"])) {
-    $product_id = (int) $_POST["product_id"];
-
-    if (isset($products[$product_id]) && $products[$product_id]["available"]) {
-        if (!isset($_SESSION["cart"])) {
-            $_SESSION["cart"] = [];
-        }
-
-        if (!isset($_SESSION["cart"][$product_id])) {
-            $_SESSION["cart"][$product_id] = 0;
-        }
-
-        $_SESSION["cart"][$product_id]++;
-        $message = $products[$product_id]["name"] . " was added to your cart.";
-    }
-}
+$stmt = $pdo->query("SELECT * FROM shoes");
+$shoes = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
+
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Showtime Sneakers</title>
+    <title>Sneaker Store</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-        .container { max-width: 900px; margin: auto; background: white; padding: 25px; border-radius: 10px; }
-        h1 { margin-bottom: 5px; }
-        .top-links { margin: 20px 0; }
-        .top-links a { margin-right: 15px; color: #111; font-weight: bold; }
-        .product { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; }
-        .price { font-weight: bold; }
-        .available { color: green; }
-        .unavailable { color: red; }
-        button { padding: 10px 14px; background: #111; color: white; border: none; border-radius: 6px; cursor: pointer; }
-        button:disabled { background: #888; cursor: not-allowed; }
-        .message { background: #e7ffe7; padding: 10px; border: 1px solid #8ad18a; margin-bottom: 15px; }
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            padding: 30px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 20px;
+        }
+
+        .shoe-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        }
+
+        .shoe-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: contain;
+            background: #eee;
+            border-radius: 8px;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            background: black;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #333;
+        }
+
+        .out {
+            color: red;
+        }
+
+        .cart-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            background: black;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 6px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Showtime Sneakers</h1>
-        <p>Shop sneakers and add available products to your cart.</p>
 
-        <div class="top-links">
-            <a href="index.php">Products</a>
-            <a href="cart.php">View Cart</a>
-        </div>
+<h1>Showtime Sneakers</h1>
 
-        <?php if (!empty($message)): ?>
-            <div class="message"><?php echo htmlspecialchars($message); ?></div>
-        <?php endif; ?>
+<a class="cart-link" href="cart.php">View Cart</a>
+<a class="cart-link" href="admin_login.php">Admin Login</a>
 
-        <?php foreach ($products as $id => $product): ?>
-            <div class="product">
-                <h2><?php echo htmlspecialchars($product["name"]); ?></h2>
-                <p class="price">$<?php echo number_format($product["price"], 2); ?></p>
+<div class="container">
+    <?php foreach ($shoes as $shoe): ?>
+        <?php
+        $sizeStmt = $pdo->prepare("SELECT size, stock FROM shoe_sizes WHERE shoe_id = ? ORDER BY size ASC");
+        $sizeStmt->execute([$shoe['id']]);
+        $sizes = $sizeStmt->fetchAll(PDO::FETCH_ASSOC);
+        ?>
 
-                <?php if ($product["available"]): ?>
-                    <p class="available">In Stock</p>
-                    <form method="POST" action="index.php">
-                        <input type="hidden" name="product_id" value="<?php echo $id; ?>">
-                        <button type="submit">Add to Cart</button>
-                    </form>
-                <?php else: ?>
-                    <p class="unavailable">Out of Stock</p>
-                    <button disabled>Unavailable</button>
-                <?php endif; ?>
-            </div>
+        <div class="shoe-card">
+            <img src="<?= htmlspecialchars($shoe['image']) ?>" alt="<?= htmlspecialchars($shoe['name']) ?>">
+
+            <h2><?= htmlspecialchars($shoe['name']) ?></h2>
+            <p><strong>$<?= number_format($shoe['price'], 2) ?></strong></p>
+
+            <form method="POST" action="cart.php">
+    <input type="hidden" name="shoe_id" value="<?= $shoe['id'] ?>">
+
+    <label>Select Size:</label>
+    <select name="size" required>
+        <?php foreach ($sizes as $size): ?>
+            <?php if ($size['stock'] > 0): ?>
+                <option value="<?= $size['size'] ?>" data-stock="<?= $size['stock'] ?>">
+                    Size <?= $size['size'] ?> - <?= $size['stock'] ?> in stock
+                </option>
+            <?php else: ?>
+                <option disabled>
+                    Size <?= $size['size'] ?> - Out of stock
+                </option>
+            <?php endif; ?>
         <?php endforeach; ?>
-    </div>
+    </select>
+
+    <label>Quantity:</label>
+    <input 
+        type="number" 
+        name="quantity" 
+        value="1" 
+        min="1" 
+        required
+    >
+
+    <button type="submit" name="add_to_cart">Add to Cart</button>
+</form>
+        </div>
+    <?php endforeach; ?>
+</div>
+
 </body>
 </html>
